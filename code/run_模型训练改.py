@@ -9,11 +9,9 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
 import numpy as np
-import random
 import csv
 import time
 from datetime import datetime
-from collections import Counter
 import os
 
 # 定义事件日志文件名
@@ -185,13 +183,14 @@ num_layers = 2  # LSTM 层数
 model = LSTMModel(input_dim, hidden_dim, output_dim, num_layers)
 model = model.cuda()  # 如果有 GPU 支持
 path='output_files/models'
+
 # 定义损失函数和优化器
 criterion1 = nn.CrossEntropyLoss()  # 交叉熵损失，用于分类任务
 criterion2 = nn.MSELoss()  # 均方误差损失，用于回归任务
 optimizer = optim.Adam(model.parameters(), lr=0.001)  # Adam 优化器
 
 # 训练模型
-num_epochs = 500  # 训练轮数
+num_epochs = 10  # 训练轮数
 best_loss = float('inf')  # 初始化最佳损失为无穷大
 for epoch in range(num_epochs):
     running_loss = 0.0  # 用于记录当前 epoch 的总损失
@@ -209,7 +208,7 @@ for epoch in range(num_epochs):
         running_loss += loss.item()  # 累加损
         if (i + 1) % 10 == 0:
             print(f'Epoch [{epoch + 1}/{num_epochs}], Step [{i + 1}/{len(dataloader)}], Loss: {loss.item():.4f}')  # 打印训练进度
-        # 计算平均损失
+    # 计算平均损失
     avg_loss = running_loss / len(dataloader)
     # 如果当前 epoch 的损失小于最佳损失，保存模型
     if avg_loss < best_loss:

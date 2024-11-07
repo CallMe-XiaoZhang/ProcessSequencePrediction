@@ -5,7 +5,6 @@
 Author: Niek Tax
 '''
 
-from __future__ import division
 import csv
 
 eventlog = "helpdesk.csv"

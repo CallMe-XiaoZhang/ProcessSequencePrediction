@@ -17,7 +17,6 @@ from datetime import datetime
 import csv
 from sklearn.metrics import mean_absolute_error
 import distance
-from scipy.spatial.distance import jaccard
 
 # 自定义函数
 # damerau_levenshtein_distance
