@@ -72,6 +72,7 @@ lasteventtime = None  # 上一个事件的时间
 for row in spamreader:  # 行格式为 "CaseID,ActivityID,CompleteTimestamp"
     t = time.strptime(row[2], "%Y-%m-%d %H:%M:%S")  # 创建一个 datetime 对象
     if row[0] != lastcase:  # 如果当前案例 ID 与上一个案例 ID 不同
+        caseids.append(row[0])
         casestarttime = t  # 更新当前案例的开始时间
         lasteventtime = t  # 更新上一个事件的时间
         lastcase = row[0]  # 更新上一个案例 ID
@@ -205,9 +206,7 @@ def train_model(model, data, epochs, patience, device, criterion, optimizer):
     best_loss = float('inf')
     no_improvement_count = 0
     best_model_weights = None
-
     for epoch in range(epochs):
-        model.train()  # 切换到训练模式
         total_loss = 0
         for line, caseid, times, times3 in zip(data['lines'], data['caseids'], data['lines_t'], data['lines_t3']):
             times.append(0)  # 在时间差列表末尾添加 0
@@ -225,6 +224,7 @@ def train_model(model, data, epochs, patience, device, criterion, optimizer):
                 # 获取目标张量
                 label = torch.tensor(target_char_indices[line[prefix_size]], dtype=torch.long).to(device)  # 下一个活动的标签
                 time_label = torch.tensor([cropped_times[-1] / divisor], dtype=torch.float).to(device)  # 时间差的标签
+                print(label,time_label)
                 # 计算损失
                 optimizer.zero_grad()
                 y_a, y_t = model(enc_tensor.unsqueeze(0))  # 进行预测

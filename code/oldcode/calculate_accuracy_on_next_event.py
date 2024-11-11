@@ -1,6 +1,6 @@
 '''
-this script takes as input the output of evaluate_suffix_and_remaining_time.py
-therefore, the latter needs to be executed first
+此脚本将evaluate_suffix和_remaining_time.py的输出作为输入
+因此，后者需要先执行
 
 Author: Niek Tax
 '''
