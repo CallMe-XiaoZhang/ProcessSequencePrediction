@@ -332,7 +332,7 @@ scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=10, mi
 
 # 训练模型
 epochs = 1500
-patience = 25 # 早停耐心
+patience = 100 # 早停耐心
 best_val_loss = float('inf')
 no_improvement = 0
 model_save_path = 'output_files/models/pt'
