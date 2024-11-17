@@ -267,5 +267,5 @@ data = {
 trained_model = train_model(model, data, epochs=1000, patience=500, device=device, criterion=criterion, optimizer=optimizer)
 
 # 保存最佳模型
-torch.save(trained_model.state_dict(), 'best_model3.pth')
+torch.save(trained_model.state_dict(), '../best_model3.pth')
 print('Best model saved successfully')

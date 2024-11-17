@@ -8,12 +8,15 @@ Author: Niek Tax
 import csv
 
 eventlog = "helpdesk.csv"
-csvfile = open('output_files/results/suffix_and_remaining_time_%s' % eventlog, 'r', encoding='utf-8')
+csvfile = open('output_files/results/true_next_activity_and_time_%s' % eventlog, 'r', encoding='utf-8')
 r = csv.reader(csvfile)
 next(r)  # header
 vals = dict()
 
 for row in r:
+    if not row:
+        print('this hanve a value')# 检查row是否为空
+        continue  # 如果row为空，跳过当前循环
     l = list()
     # add key
     if row[0] in vals.keys():

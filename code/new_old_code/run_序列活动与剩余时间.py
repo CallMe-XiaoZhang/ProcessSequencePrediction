@@ -108,10 +108,6 @@ timeseqs.append(times)  # 将最后一个案例的时间差序列添加到列表
 timeseqs2.append(times2)  # 将最后一个案例与第一个事件的时间差序列添加到列表中
 numlines += 1  # 增加案例计数
 
-print(lines)
-print(timeseqs)
-print(timeseqs2)
-
 # 计算平均时间
 divisor = np.mean([item for sublist in timeseqs for item in sublist])  # 计算平均时间间隔
 print('divisor: {}'.format(divisor))
@@ -140,6 +136,7 @@ lines_t2 = fold1_t2 + fold2_t2  # 合并前两折的时间差序列（相对于�
 # 获取所有可能的字符并编号
 lines = [x + '!' for x in lines]  # 在每个活动序列末尾添加分隔符
 maxlen = max([len(x) for x in lines])  # 找到最大行长度
+
 chars = set(''.join(lines))  # 获取所有可能的字符
 #chars.discard('!')  # 移除分隔符
 target_chars = chars.copy()  # 目标字符集
@@ -212,7 +209,6 @@ timeseqs2.append(times2)  # 将最后一个案例的时间差序列（相对于�
 timeseqs3.append(times3)  # 将最后一个案例的绝对时间序列添加到 timeseqs3 列表中
 numlines += 1  # 增加案例计数
 
-
 # 分割数据
 # 假设 elem_per_fold 是每个折叠包含的元素数量
 # 这里选择第3个折叠，即从 2*elems_per_fold 开始到最后的所有数据
@@ -262,7 +258,7 @@ model = LSTMModel(input_dim, hidden_dim, output_dim, num_layers)
 model = model.to(device) # 如果有 GPU 支持
 
 # 加载最佳模型
-save_dir = 'output_files/models'  # 指定保存模型的目录
+save_dir = '../output_files/models'  # 指定保存模型的目录
 save_path = os.path.join(save_dir, 'best_model2.pth')
 model.load_state_dict(torch.load(save_path))
 
@@ -287,8 +283,15 @@ def encode(sentence, times, times3, maxlen=maxlen):  # 编码一个三维张量�
     return torch.tensor(X, dtype=torch.float32)  # 返回 PyTorch 张量
 
 
-def getSymbol(prediction):# 根据模型的预测结果返回最可能的符号（活动）
-    symbol = target_indices_char[prediction]
+def getSymbol(predictions):# 根据模型的预测结果返回最可能的符号（活动）
+    maxPrediction = 0  # 当前最大预测概率
+    symbol = ''  # 当前最可能的符号
+    i = 0  # 索引变量
+    for prediction in predictions:
+        if prediction >= maxPrediction:
+            maxPrediction = prediction
+            symbol = target_indices_char[i]  # 更新最可能的符号
+        i += 1
     return symbol
 
 # 初始化用于存储实际值和预测值的列表
@@ -351,8 +354,7 @@ with open('output_files/results/suffix_and_remaining_time_%s' % eventlog, 'w',en
                     model.eval()  # 切换到评估模式
                     y = model(enc_tensor)  # 进行预测
                 # 获取预测的活动和时间
-                y_char = y[0]  # 获取活动预测值
-                y_char = torch.argmax(y[0]).item()
+                y_char = y[0][0]  # 获取活动预测值
                 y_t = y[1][0][0].item()  # 获取时间差预测值
                 # 获取预测的活动
                 prediction = getSymbol(y_char)

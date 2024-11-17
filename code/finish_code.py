@@ -1,21 +1,23 @@
 # -*- coding: utf-8 -*-
-# @Time : 2024/11/11 14:31
+# @Time : 2024/11/13 10:11
 # @Author : Tao
 # @Email : 3195858080@qq.com
-# @File : true_run_train_plus模型训练.py
+# @File : finish_code.py
 
-import os
+
+from collections import Counter
+from torch.optim.lr_scheduler import ReduceLROnPlateau
+from sklearn.model_selection import train_test_split
 import time
 import copy
 import numpy as np
-from collections import Counter
 from datetime import datetime
+from sklearn.metrics import mean_absolute_error
 import csv
-import torch
 import torch.nn as nn
-from torch.optim.lr_scheduler import ReduceLROnPlateau
-from sklearn.model_selection import train_test_split
-
+import torch
+import distance
+from jellyfish._jellyfish import damerau_levenshtein_distance
 
 # 全局变量
 EventLog = "helpdesk.csv"
@@ -47,6 +49,7 @@ times = []
 times2 = []
 times3 = []
 times4 = []
+caseids = []
 # csv variables
 numLines = 0
 firstLine = True
@@ -58,6 +61,7 @@ for row in spamReader:
     t = time.strptime(row[2], "%Y-%m-%d %H:%M:%S")
     # update event variables
     if row[0] != lastCase:  # 'lastCase'是为循环保存最后一个执行的案例
+        caseids.append(row[0])
         #与前面的案例不同，此案例的更新时间
         lastCase = row[0]
         caseStartTime = t
@@ -332,7 +336,7 @@ scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=10, mi
 
 # 训练模型
 epochs = 1500
-patience = 30 # 早停耐心
+patience = 150 # 早停耐心
 best_val_loss = float('inf')
 no_improvement = 0
 model_save_path = 'output_files/models/pt'
@@ -359,12 +363,6 @@ for epoch in range(epochs):
         if val_loss < best_val_loss:
             best_val_loss = val_loss
             no_improvement = 0
-            # 删除之前的模型文件（如果存在）
-            for file_name in os.listdir(model_save_path):
-                if file_name.endswith('.pt') or file_name.endswith('.pth'):
-                    os.remove(os.path.join(model_save_path, file_name))
-            # 保存最佳模型参数
-            torch.save(model.state_dict(), os.path.join(model_save_path, f'model_epoch_{epoch:02d}_val_loss_{val_loss:.2f}.pt'))
         else:
             no_improvement += 1
             if no_improvement >= patience:
@@ -372,6 +370,161 @@ for epoch in range(epochs):
                 break
     # 调整学习率
     scheduler.step(val_loss)
-    print(f"Epoch {epoch + 1}/{epochs},"
-          f"Train Loss: {loss.item():.4f}, loss_act: {loss_act:.4f}, loss_time: {loss_time:.4f} ,"
-          f"Val Loss: {val_loss:.4f}, val_loss_time: {val_loss_time:.4f}, val_loss_act: {val_loss_act:.4f} ")
+    print(f"Epoch {epoch + 1}/{epochs}, Train Loss: {loss.item():.4f}, Val Loss: {val_loss:.4f}")
+
+fold3 = lines[2*elems_per_fold:]
+fold3_c = caseids[2*elems_per_fold:]
+fold3_t = timeSeqs[2*elems_per_fold:]
+fold3_t2 = timeSeqs2[2*elems_per_fold:]
+fold3_t3 = timeSeqs3[2*elems_per_fold:]
+fold3_t4 = timeSeqs4[2*elems_per_fold:]
+
+# 使用第三折
+lines = fold3
+caseids = fold3_c
+lines_t = fold3_t
+lines_t2 = fold3_t2
+lines_t3 = fold3_t3
+lines_t4 = fold3_t4
+
+# Section 7 辅助函数
+def encode(sentence, times, times2, times3, times4, maxlen=max_len):
+    num_features = len(chars)+5
+    X = np.zeros((1, maxlen, num_features), dtype=np.float32)
+    leftpad = maxlen-len(sentence)
+    for t, char in enumerate(sentence):
+        for c in chars:
+            if c==char:
+                X[0, t+leftpad, char_indices[c]] = 1
+        X[0, t+leftpad, len(chars)] = t+1 #字符的位置
+        X[0, t+leftpad, len(chars)+1] = times[t]/divisor
+        X[0, t+leftpad, len(chars)+2] = times2[t]/divisor2
+        X[0, t+leftpad, len(chars)+3] = times3[t]/DaySeconds
+        X[0, t+leftpad, len(chars)+4] = times4[t]/7
+    return torch.tensor(X, dtype=torch.float32)  # 返回 PyTorch 张量
+
+def getSymbol(predictions):
+    # 获取最大预测值的索引
+    maxPredictionIndex = predictions.argmax().item()
+    # 返回目标字符
+    symbol = target_indices_char[maxPredictionIndex]
+    return symbol
+
+# Section 6 生成预测并写入文件
+predict_size = 1
+
+one_ahead_gt = []
+one_ahead_pred = []
+
+two_ahead_gt = []
+two_ahead_pred = []
+
+three_ahead_gt = []
+three_ahead_pred = []
+
+# 打开输出文件以写入预测结果
+with open('output_files/results/true_next_activity_and_time2_%s' % EventLog, 'w', encoding='utf-8') as csvfile:
+    spamwriter = csv.writer(csvfile, delimiter=',', quotechar='|', quoting=csv.QUOTE_MINIMAL)
+    # 写入文件的表头行，包含预测分析中的各项指标
+    spamwriter.writerow([
+        "CaseID",
+        "Prefix length",
+        "Ground truth",
+        "Predicted",
+        "Levenshtein",
+        "Damerau",
+        "Jaccard",
+        "Ground truth times",
+        "Predicted times",
+        "RMSE",
+        "MAE"
+    ])
+    for prefix_size in range(2, max_len):
+        print(prefix_size)
+        for line, caseid, times,times2,times3,times4 in zip(lines, caseids, lines_t,lines_t2,lines_t3,lines_t4):
+            cropped_line = ''.join(line[:prefix_size])
+            cropped_times = times[:prefix_size]
+            cropped_times2 = times2[:prefix_size]
+            cropped_times3 = times3[:prefix_size]
+            cropped_times4 = times4[:prefix_size]
+
+            if '!' in cropped_line:
+                continue  # 不要对这个案子做任何预测，因为这个案子已经结束了
+            ground_truth = ''.join(line[prefix_size:prefix_size + predict_size])
+            ground_truth_t = times[prefix_size:prefix_size + predict_size]
+
+            predicted = ''
+            predicted_t = []
+            for i in range(0,predict_size):
+                if len(ground_truth) <= i:
+                    continue
+                enc = encode(cropped_line, cropped_times,cropped_times2,cropped_times3, cropped_times4,max_len)
+                enc_tensor = enc.clone().detach().float().to(device)
+                # 进行预测
+                with torch.no_grad():  # 禁用梯度计算
+                    act_pred, time_pred = model(enc_tensor)
+                y_char = getSymbol(act_pred)
+                y_t = time_pred.item()
+                # 幻觉方法添加
+                # 对y_t处理
+                cropped_line += y_char
+                if y_t < 0:
+                    y_t = 0
+                cropped_times.append(y_t)
+                y_t = y_t * divisor
+                predicted_t.append(y_t)
+                # 对y_char处理
+                if i == 0:
+                    if len(ground_truth_t) > 0:#预测为1步，后续至少1
+                        one_ahead_pred.append(y_t)
+                        one_ahead_gt.append(ground_truth_t[0])
+                if i == 1:
+                    if len(ground_truth_t) > 1:
+                        two_ahead_pred.append(y_t)
+                        two_ahead_gt.append(ground_truth_t[1])
+                if i == 2:
+                    if len(ground_truth_t) > 2:
+                        three_ahead_pred.append(y_t)
+                        three_ahead_gt.append(ground_truth_t[2])
+                if y_char == '!':  # 预测结束
+                    print('! predicted, end case')
+                    break
+                predicted += y_char
+            print('caseid',caseid)
+            print('line',line)
+            print('cropped_line',cropped_line)
+            print('ground_truth',ground_truth)
+            print('predicted',predicted)
+            print('ground_truth_t',ground_truth_t)
+            print('predicted_t',predicted_t)
+
+            # 写入部分
+            output = []
+            if len(ground_truth) > 0:
+                output.append(caseid)
+                output.append(prefix_size)
+                output.append(ground_truth)
+                output.append(predicted)
+                output.append(1 - distance.nlevenshtein(predicted, ground_truth) / max(len(predicted), len(ground_truth)))
+                dls = 1 - (damerau_levenshtein_distance(predicted, ground_truth) / max(len(predicted),len(ground_truth)))
+                if dls < 0:
+                    dls = 0  # 修正 Damerau-Levenshtein Similarity 为负数的情况
+                output.append(dls)
+                output.append(1 - distance.jaccard(predicted, ground_truth))
+                output.append('; '.join(str(x) for x in ground_truth_t))
+                output.append('; '.join(str(x) for x in predicted_t))
+
+                if len(predicted_t) > len(ground_truth_t):  # 如果预测的事件比实际事件多，只使用需要的事件进行时间评估
+                    predicted_t = predicted_t[:len(ground_truth_t)]
+                if len(ground_truth_t) > len(predicted_t):  # 如果预测的事件比实际事件少，用 0 作为占位符
+                    predicted_t.extend([0] * (len(ground_truth_t) - len(predicted_t)))
+
+                if len(ground_truth_t) > 0 and len(predicted_t) > 0:
+                    output.append('')
+                    output.append(mean_absolute_error(ground_truth_t, predicted_t))
+                else:
+                    output.append('')
+                    output.append('')
+                print(output)
+                spamwriter.writerow(output)
+        print('\n'*5)

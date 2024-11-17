@@ -182,7 +182,7 @@ num_layers = 2  # LSTM 层数
 # 创建模型实例
 model = LSTMModel(input_dim, hidden_dim, output_dim, num_layers)
 model = model.cuda()  # 如果有 GPU 支持
-path='output_files/models'
+path= '../output_files/models'
 
 # 定义损失函数和优化器
 criterion1 = nn.CrossEntropyLoss()  # 交叉熵损失，用于分类任务
